@@ -59,11 +59,12 @@ $ npm install
 cp .env.example .env
 ```
 4. Create a new database in phpmyadmin with the name  `dbelearning`
-5. Migration database using `knex` command below
+5. Create new folder directory with name `public/uploads/assignments` and `public/uploads/submissions`
+6. Migration database using `knex` command below
 ```
 $ knex migrate:latest --env development
 ```
-6. Seeder database using `knex` command below
+7. Seeder database using `knex` command below
 ```
 $ knex seed:run --env development
 ```
