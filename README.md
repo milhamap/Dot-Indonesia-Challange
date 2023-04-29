@@ -71,7 +71,7 @@ $ knex seed:run --env development
 
 ## How to Run
 1. Open 2 terminal
-2. Terminal 1 to compile the TypeScript into JS File (watch mode) with command below
+2. Terminal 1 uses git bash to compile the TypeScript into JS File (watch mode) with command below
 ```console
 $ npm run ts
 ```
