@@ -10,9 +10,24 @@ This project is created for an intership test in DOT Indonesia as a Backend Engi
 
 ## Design Pattern
 
-This project uses Repository Pattern.
+This project uses a repository pattern. Why use a repository pattern?
+
+1. Flexibility when there is a change in the naming of a table field or a change in the database schema
+2. Flexibility when we decide to change ORM, QueryBuilder, or database
+3. Ease of finding errors during development
+
+Because I'm separating the business logic and persistence/request logic
 
 ![Repository Pattern](public/images/Repository-Pattern.png)
+
+1. API Layer (Controller)
+   The API layer is a REST API that provides an interface for interacting with applications
+
+2. Service Layer
+   The Service layer is responsible for handling the application's business logic.
+
+3. Repository Layer
+   The Repository layer is responsible for handling persistence logic. This layer is responsible for sending requests to the database.
 
 ## Depedencies
 
