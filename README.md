@@ -20,13 +20,13 @@ Because I'm separating the business logic and persistence/request logic
 
 ![Repository Pattern](public/images/Repository-Pattern.png)
 
-1. API Layer (Controller)
+1. API Layer (Controller) <br>
    The API layer is a REST API that provides an interface for interacting with applications
 
-2. Service Layer
+2. Service Layer <br>
    The Service layer is responsible for handling the application's business logic.
 
-3. Repository Layer
+3. Repository Layer <br>
    The Repository layer is responsible for handling persistence logic. This layer is responsible for sending requests to the database.
 
 ## Depedencies
