@@ -1,8 +1,6 @@
-<p align="center"><img src="public/images/logo.png" width="400"></p>
-
 ## About this Project
 
-This project is created for an intership test in DOT Indonesia as a Backend Engineer (Node JS). This project is about e-learning systems. This system has 3 user roles (admin, lecture, and student). Admin manages the system and creates accounts for new lectures. Lecturers can send assignments aimed at students and assess the results of the answers students give. Students can submit answers to assignments given by lecturers and evaluate if the value of the answer is remedial
+This project is about e-learning systems. This system has 3 user roles (admin, lecture, and student). Admin manages the system and creates accounts for new lectures. Lecturers can send assignments aimed at students and assess the results of the answers students give. Students can submit answers to assignments given by lecturers and evaluate if the value of the answer is remedial
 
 ## Desain Database
 
