@@ -1,151 +1,142 @@
-import { Request } from "express";
 import EmailVerficationRepository from "../repositories/EmailVerificationRepository";
 import AuthenticationRepository from "../repositories/AuthenticationRepository";
-import { v4 as uuid4 } from "uuid";
 import Authentication from "../utils/Authentication";
 import EmailVerification from "../utils/EmailVerfication";
 import randomstring from "randomstring";
+import BaseService from "./BaseService";
+import ResponseFormat from "../utils/ResponseFormat";
+import RegisterLectureDto from "../dtos/RegisterLectureDto";
 
-class AuthenticationService {
-    user: {
-        id: number,
-        role_id: number
-    };
-    body: Request["body"];
-    params: Request["params"];
-    cookie: Request["cookies"];
-
-    constructor(req: Request) {
-        this.user = req.app.locals.credentials;
-        this.body = req.body;
-        this.params = req.params;
-        this.cookie = req.cookies;
-    }
-
-    sendEmailVerification = async () => {
+class AuthenticationService extends BaseService {
+    sendEmailVerification = async (): Promise<ResponseFormat> => {
         const { email } = this.body;
         const user = await AuthenticationRepository.findByEmail(email);
-        if (!user) return { message: "Email not found" };
+        if (!user) return ResponseFormat.error(404, "User not found")
+        const token_verification = await this.loopingTokenVerificationEmail();
+        const verifyToken = await EmailVerficationRepository.findByEmail(email);
+        this.decisionVerifyToken(verifyToken, token_verification, email);
+        const result = await EmailVerification.sendEmailVerification(email, token_verification);
+        return ResponseFormat.success(200, result.message);
+    }
+
+    loopingTokenVerificationEmail = async (): Promise<string> => {
         let token_verification;
         do {
             token_verification = randomstring.generate(8)
-        } while (await EmailVerficationRepository.tokenNotUse(token_verification));
-        const verifyToken = await EmailVerficationRepository.findByEmail(email);
-        if (verifyToken) {
-            if (verifyToken.status == 1) return {message: 'Email already verified'}
-            await EmailVerficationRepository.updateTokenByEmail(email, token_verification);
-        } else {
-            await EmailVerficationRepository.insert(email, token_verification);
-        }
-        const result = await EmailVerification.sendEmailVerification(email, token_verification);
-        return result;
+        } while(await EmailVerficationRepository.tokenNotUse(token_verification));
+        return token_verification;
     }
 
-    confirmVerificationEmail = async () => {
+    decisionVerifyToken = async (token: any, verify: string, email: string): Promise<number | number[] | ResponseFormat> => {
+        if (token) {
+            if (token.status == 1) return ResponseFormat.error(400, "Email already verified")
+            return await EmailVerficationRepository.updateTokenByEmail(email, verify);
+        } else {
+            return await EmailVerficationRepository.insert(email, verify);
+        }
+    }
+
+    confirmVerificationEmail = async (): Promise<ResponseFormat> => {
         const { token } = this.params;
         const status = await EmailVerficationRepository.findByToken(token);
-        if (!status) return { message: "Wrong Verification Code" };
-        if (status.status === true) return { message: "Email already verified" };
+        if (!status) return ResponseFormat.error(400, "Wrong Verification Token")
+        if (status.status == true) return ResponseFormat.success(204, "Email already verified!")
         await EmailVerficationRepository.updateStatusByToken(token);
         await AuthenticationRepository.updateActiveByEmail(status.email);
-        return { message: "Email verified" };
+        return ResponseFormat.success(204, "Email verified!")
     }
 
-    login = async () => {
+    login = async (): Promise<ResponseFormat> => {
         const { email, password } = this.body;
         const user = await AuthenticationRepository.findByEmail(email);
-        if (!user) return { message: "Email or password wrong" };
+        if (!user) return ResponseFormat.error(400, "Email or password wrong")
         const checkPassword = await Authentication.passwordCompare(password, user.password);
-        if (!checkPassword) return { message: "Email or password wrong" };
-        if (user.is_active == 0) return { message: "User not verified!" };
-        const token = Authentication.createUserToken({
-            id: user.id,
-            role_id: user.role_id
-        });
-        const refreshToken = Authentication.createRefreshToken({
-            id: user.id,
-            role_id: user.role_id,
-        });
+        if (!checkPassword) return ResponseFormat.error(400, "Email or password wrong")
+        if (user.is_active == 0) return ResponseFormat.error(400, "Email not verified")
+        const token = Authentication.createUserToken({ id: user.id, role_id: user.role_id });
+        const refreshToken = Authentication.createRefreshToken({ id: user.id, role_id: user.role_id });
         await AuthenticationRepository.updateRefreshTokenById(user.id, refreshToken);
-        return { 
-            token,
-            refreshToken
-        };
+        return ResponseFormat.resource(200, "Login success", { token, refreshToken });
     }
 
-    registerLecturer = async () => {
-        const { nip, fullname, email, password, confirm_password } = this.body;
-        if (password !== confirm_password) return { message: "Password doesn't match" };
-        let random
-        do {
-            random = uuid4()
-        } while(await AuthenticationRepository.randomNotUse(random))
-        if (await AuthenticationRepository.emailOrNipNotUse(email, nip)) return {message: "Email or NIP already used"}
-        const hashedPassword: string = await Authentication.passwordHash(password);
-        const user = await AuthenticationRepository.insertLecturer(nip, fullname, email, hashedPassword, random)
-        const token = Authentication.createUserToken({
-            id: user[0],
-            role_id: 2
-        });
+    registerLecturer = async (): Promise<ResponseFormat> => {
+        const lecturerData = this.convertDataToLecturerData(this.body);
+        if (lecturerData.password !== lecturerData.confirm_password) return ResponseFormat.error(400, "Password doesn't match")
+        const random = await this.loopingRandomField(AuthenticationRepository);
+        lecturerData.random = random;
+        if (await AuthenticationRepository.emailOrNipNotUse(lecturerData.email, lecturerData.nip)) return ResponseFormat.error(400, "Email or NIP already used")
+        const hashedPassword: string = await Authentication.passwordHash(lecturerData.password);
+        lecturerData.password = hashedPassword;
+        const user = await AuthenticationRepository.insertLecturer(new RegisterLectureDto(lecturerData));
+        const token = Authentication.createUserToken({ id: user[0], role_id: 2 });
+        return ResponseFormat.resource(200, "Register success", { token });
+    }
+
+    convertDataToLecturerData = (data: any): any => {
         return {
-            message: "Register success",
-            token
-        };
+            nip: data.nip,
+            fullname: data.fullname,
+            email: data.email,
+            password: data.password,
+            confirm_password: data.confirm_password,
+            random: data.random
+        }
     }
     
-    registerStudent = async () => {
-        const { nrp, fullname, email, password, confirm_password } = this.body;
-        if (password !== confirm_password) return { message: "Password doesn't match" };
-        let random
-        do {
-            random = uuid4()
-        } while(await AuthenticationRepository.randomNotUse(random))
-        if (await AuthenticationRepository.emailOrNrpNotUse(email, nrp)) return {message: "Email or NRP already used"}
-        const hashedPassword: string = await Authentication.passwordHash(password);
-        await AuthenticationRepository.insertStudent(nrp, fullname, email, hashedPassword, random)
-        return { message: "Register success" };
+    registerStudent = async (): Promise<ResponseFormat> => {
+        const registerData = this.convertDataToStudentData(this.body);
+        if (registerData.password !== registerData.confirm_password) return ResponseFormat.error(400, "Password doesn't match")
+        const random = await this.loopingRandomField(AuthenticationRepository);
+        registerData.random = random;
+        if (await AuthenticationRepository.emailOrNrpNotUse(registerData.email, registerData.nrp)) return ResponseFormat.error(400, "Email or NRP already used")
+        const hashedPassword: string = await Authentication.passwordHash(registerData.password);
+        registerData.password = hashedPassword;
+        await AuthenticationRepository.insertStudent(registerData)
+        return ResponseFormat.success(201, "Register success")
     }
 
-    refreshToken = async () => {
-        const refreshToken = this.cookie.refreshToken;
-        if (!refreshToken) return { message: "Refresh Token expired!" };
-        const token = Authentication.verifyRefreshToken(refreshToken);
+    convertDataToStudentData = (data: any): any => {
         return {
-            message: "Refresh Token success",
-            token
-        };
-    }
-
-    logout = async () => {
-        const refreshToken = this.cookie.refreshToken;
-        if (!refreshToken) return { message: "Refresh Token expired!" };
-        const user = await AuthenticationRepository.findByRefreshToken(refreshToken);
-        if (!user) return { message: "User Not Found!" };
-        await AuthenticationRepository.updateRefreshTokenById(user.id);
-        return { message: "Logout success" }
-    }
-
-    getUser = async () => {
-        const user = await AuthenticationRepository.findById(this.user.id);
-        return {
-            message: "Get User success",
-            user
+            nrp: data.nrp,
+            fullname: data.fullname,
+            email: data.email,
+            password: data.password,
+            confirm_password: data.confirm_password,
+            random: data.random
         }
     }
 
-    updatePassword = async () => {
-        const { old_password, new_password, new_confirm_password } = this.body;
-        if (new_password !== new_confirm_password) return {message: "Password not match"};
+    refreshToken = async (): Promise<ResponseFormat> => {
+        const refreshToken = this.cookie.refreshToken;
+        if (!refreshToken) return ResponseFormat.error(400, "Refresh Token expired!")
+        const token = Authentication.verifyRefreshToken(refreshToken);
+        return ResponseFormat.resource(200, "Success refresh token", { token });
+    }
+
+    logout = async (): Promise<ResponseFormat> => {
+        const refreshToken = this.cookie.refreshToken;
+        if (!refreshToken) return ResponseFormat.error(400, "Refresh Token expired!")
+        const user = await AuthenticationRepository.findByRefreshToken(refreshToken);
+        if (!user) return ResponseFormat.error(404, "User not found")
+        await AuthenticationRepository.updateRefreshTokenById(user.id);
+        return ResponseFormat.success(201, "Logout success");
+    }
+
+    getUser = async (): Promise<ResponseFormat> => {
         const user = await AuthenticationRepository.findById(this.user.id);
-        if (!user) return { message: "User Not Found!" }
+        return ResponseFormat.resource(200, "Success get user", { user });
+    }
+
+    updatePassword = async (): Promise<ResponseFormat> => {
+        const { old_password, new_password, new_confirm_password } = this.body;
+        if (new_password !== new_confirm_password) return ResponseFormat.error(400, "Password doesn't match");
+        const user = await AuthenticationRepository.findById(this.user.id);
+        if (!user) return ResponseFormat.error(404, "User not found")
         const checkPassword = await Authentication.passwordCompare(old_password, user.password);
-        if (!checkPassword) return { message: "Password not match" };
+        if (!checkPassword) return ResponseFormat.error(400, "Password doesn't match");
         const hashedPassword: string = await Authentication.passwordHash(new_password);
         await AuthenticationRepository.updatePasswordById(this.user.id, hashedPassword);
-        return {
-            message: "Update Password success",
-            user
-        }
+        return ResponseFormat.resource(200, "Update password success", { user });
     }
 }
 

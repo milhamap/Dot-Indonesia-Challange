@@ -1,109 +1,91 @@
-import { Request } from "express";
 import fs from "fs";
 import { promisify } from "util"
-import { v4 as uuid4 } from "uuid";
 import AssignmentRepository from "../repositories/AssignmentRepository";
 import SubmissionRepository from "../repositories/SubmissionRepository";
+import BaseService from "./BaseService";
+import ResponseFormat from "../utils/ResponseFormat";
+import updateAssignmentDto from "../dtos/UpdateAssignmentDto";
 
-class AssignmentService {
-    user: {
-        id: number,
-        role_id: number
-    }
-    body: Request["body"];
-    params: Request["params"];
-    file: Express.Multer.File | undefined;
-
-    constructor(req: Request) {
-        this.user = req.app.locals.credentials;
-        this.body = req.body;
-        this.params = req.params;
-        this.file = req.file
-    }
-
-    getAll = async () => {
+class AssignmentService extends BaseService {
+    getAll = async (): Promise<ResponseFormat> => {
         const assignments = await AssignmentRepository.getAll();
-        return {
-            message: "Success get all assignments",
-            assignments
-        };
+        return ResponseFormat.resource(200, "Success get all assignments", assignments)
     }
 
-    store = async () => {
+    store = async (): Promise<ResponseFormat> => {
         const unlinkSync = promisify(fs.unlink)
-        const { title, description, deadline } = this.body;
-        let random
-        do {
-            random = uuid4()
-        } while(await AssignmentRepository.randomNotUse(random))
+        const storeData = this.convertDataToCreateAssignmentData(this.body)
+        const random = await this.loopingRandomField(AssignmentRepository);
+        const fileName = await this.checkFileAvailable(this.file)
+        storeData.random = random
+        storeData.file = fileName
+        storeData.user_id = this.user.id
+        const assignment = await AssignmentRepository.insert(storeData);
+        return ResponseFormat.resource(200, "Success create assignment", { id: assignment[0], ...storeData })
+    }
 
-        let fileName = ""
-        if (this.file)
-            fileName = this.file.filename
-        else 
-            throw new Error("File tidak ditemukan");
-        const assignment = await AssignmentRepository.insert(random, title, description, fileName, deadline, this.user.id);
-        if (assignment.length == 0) await unlinkSync('public/uploads/assignments/' + fileName)
+    convertDataToCreateAssignmentData = (data: any): any => {
         return {
-            message: "Assignment created!",
-            assignment: {
-                id: assignment[0],
-                title,
-                description,
-                file: fileName,
-                deadline,
-            }
+            random: data.random,
+            title: data.title,
+            description: data.description,
+            deadline: data.deadline,
+            file: data.file ?? null,
+            user_id: data.user_id ?? null
         }
     }
 
-    getMyAssignments = async () => {
+    getMyAssignments = async (): Promise<ResponseFormat> => {
         const assignments = await AssignmentRepository.getMyAssignments(this.user.id);
-        return {
-            message: "Success get  my assignments",
-            assignments
-        };
+        return ResponseFormat.resource(200, "Success get my assignments", assignments)
     }
 
-    getOne = async () => {
+    getOne = async (): Promise<ResponseFormat> => {
         const assignment = await AssignmentRepository.findByRandom(this.params.random);
-        return {
-            message: "Success get assignment",
-            assignment
-        };
+        return ResponseFormat.resource(200, "Success get assignment", assignment)
     }
 
-    update = async () => {
+    update = async (): Promise<ResponseFormat> => {
         const unlinkSync = promisify(fs.unlink)
-        const { title, description, deadline } = this.body;
-        const asg = await AssignmentRepository.findByRandom(this.params.random)
-        if (!asg) {
-            if (this.file) await unlinkSync('public/uploads/assignments/' + this.file.filename)
-            return { message: "Assignment Not Found!" };
-        } 
-        await unlinkSync('public/uploads/assignments/' + asg.file)
-        let fileName = ""
-        if (this.file)
-            fileName = this.file.filename
-        else 
-            throw new Error("File tidak ditemukan");
-        const assignment = await AssignmentRepository.updateByRandom(this.params.random, title, description, fileName, deadline);
-        if (assignment != 1) await unlinkSync('public/uploads/assignments/' + fileName)
-        return { message: "Assignment updated!" }
+        try {
+            const updateData = this.convertDataToUpdateAssignmentData(this.body)
+            const asg = await AssignmentRepository.findByRandom(this.params.random)
+            await this.checkAssignmentAvailable(asg, unlinkSync)
+            const fileName = await this.checkFileAvailable(this.file)
+            await AssignmentRepository.updateByRandom(this.params.random, {...updateData, file: fileName});
+            await unlinkSync('public/uploads/assignments/' + asg.file)
+            return ResponseFormat.success(201, "Success update assignment")
+        } catch(error: any) {
+            await unlinkSync('public/uploads/assignments/' + this.file?.filename)
+            return ResponseFormat.error(500, "Internal Server Error")
+        }
     }
 
-    delete = async () => {
+    convertDataToUpdateAssignmentData = (data: any): any => {
+        return {
+            title: data.title,
+            description: data.description,
+            deadline: data.deadline
+        }
+    }
+
+    delete = async (): Promise<ResponseFormat> => {
         const unlinkSync = promisify(fs.unlink)
         const assignment = await AssignmentRepository.findByRandom(this.params.random)
         const submissions = await SubmissionRepository.getsByAssignmentId(assignment.id)
+        await this.checkSubmissionAvailable(submissions, unlinkSync)
+        await unlinkSync('public/uploads/assignments/' + assignment.file)
+        await AssignmentRepository.deleteById(assignment.id);
+        return ResponseFormat.success(201, "Success delete assignment")
+    }
+
+    checkSubmissionAvailable = async (submissions: any, unlink: any) => {
         if (submissions.length != 0) {
             await Promise.all(submissions.map(async (submission: any) => {
-                await unlinkSync('public/uploads/submissions/' + submission.file)
+                await unlink('public/uploads/submissions/' + submission.file)
                 await SubmissionRepository.deleteById(submission.id)
             }))
         }
-        await unlinkSync('public/uploads/assignments/' + assignment.file)
-        await AssignmentRepository.deleteById(assignment.id);
-        return { message: "Assignment deleted!" }
     }
 }
 

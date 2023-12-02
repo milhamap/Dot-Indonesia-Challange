@@ -1,83 +1,57 @@
 import { Request, Response } from "express";
-import IController from "./ControllerInterface";
 import SubmissionService from "../services/SubmissionService";
+import BaseController from './BaseController';
 
-class SubmissionController implements IController {
+class SubmissionController extends BaseController {
     index = async (req: Request, res: Response): Promise<Response> => {
         try {
             const service: SubmissionService = new SubmissionService(req);
-            const message = await service.getsSubmissionByAssignmentId()
-            return res.status(200).json(message)
+            const result = await service.getsSubmissionByAssignmentId()
+            return this.decisionResponse(res, result)
         } catch (error: any) {
-            return res.status(500).json({
-                message: "Internal Server Error",
-                error: error.message
-            })
+            return this.convertDataToInternalServerErrorResponse(res, error)
         }
     }
 
     create = async (req: Request, res: Response): Promise<Response> => {
-        try {
-            const service: SubmissionService = new SubmissionService(req);
-            const message = await service.store()
-            return res.status(200).json(message)
-        } catch (error: any) {
-            return res.status(500).json({
-                message: "Internal Server Error",
-                error: error.message
-            })
-        }
+        const service: SubmissionService = new SubmissionService(req);
+        const result = await service.store()
+        return this.decisionResponse(res, result)
     }
 
     createValuation = async (req: Request, res: Response): Promise<Response> => {
         try {
             const service: SubmissionService = new SubmissionService(req);
-            const message = await service.createValuation()
-            return res.status(200).json(message)
+            const result = await service.createValuation()
+            return this.decisionResponse(res, result)
         } catch (error: any) {
-            return res.status(500).json({
-                message: "Internal Server Error",
-                error: error.message
-            })
+            return this.convertDataToInternalServerErrorResponse(res, error)
         }
     }
 
     show = async (req: Request, res: Response): Promise<Response> => {
         try {
             const service: SubmissionService = new SubmissionService(req);
-            const message = await service.getOneByAssignmentIdAndUserId()
-            return res.status(200).json(message)
+            const result = await service.getOneByAssignmentIdAndUserId()
+            return this.decisionResponse(res, result)
         } catch (error: any) {
-            return res.status(500).json({
-                message: "Internal Server Error",
-                error: error.message
-            })
+            return this.convertDataToInternalServerErrorResponse(res, error)
         }
     }
 
     update = async (req: Request, res: Response): Promise<Response> => {
-        try {
-            const service: SubmissionService = new SubmissionService(req);
-            const message = await service.update()
-            return res.status(200).json(message)
-        } catch (error: any) {
-            return res.status(500).json({
-                message: "Internal Server Error",
-                error: error.message
-            })
-        }
+        const service: SubmissionService = new SubmissionService(req);
+        const result = await service.update()
+        return this.decisionResponse(res, result)
     }
 
     delete = async (req: Request, res: Response): Promise<Response> => {
         try {
             const service: SubmissionService = new SubmissionService(req);
-            const message = await service.delete()
-            return res.status(200).json(message)
+            const result = await service.delete()
+            return this.decisionResponse(res, result)
         } catch (error: any) {
-            return res.status(500).json({
-                message: "Internal Server Error",
-                error: error.message
-            })
+            return this.convertDataToInternalServerErrorResponse(res, error)
         }
     }
 }

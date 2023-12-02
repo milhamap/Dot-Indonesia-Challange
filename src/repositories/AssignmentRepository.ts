@@ -1,4 +1,6 @@
 import knex from "../configs/database";
+import CreateAssignmentDto from "../dtos/CreateAssignmentDto";
+import UpdateAssignmentDto from "../dtos/UpdateAssignmentDto";
 
 class AssignmentRepository {
     // random not use
@@ -12,8 +14,8 @@ class AssignmentRepository {
     }
 
     // create
-    insert = async (random: string, title: string, description: string, file: string, deadline: string, user_id: number) => {
-        return await knex('assignments').insert({ random, title, description, file, deadline, user_id });
+    insert = async (assignmentDto: CreateAssignmentDto) => {
+        return await knex('assignments').insert(assignmentDto);
     }
 
     // read
@@ -34,8 +36,8 @@ class AssignmentRepository {
     }
 
     // update
-    updateByRandom = async (random: string, title: string, description: string, file: string, deadline: string) => {
-        return await knex('assignments').where({ random }).update({ title, description, file, deadline });
+    updateByRandom = async (random: string, updateAssignmentDto: UpdateAssignmentDto) => {
+        return await knex('assignments').where({ random }).update(updateAssignmentDto);
     }
     
     // delete

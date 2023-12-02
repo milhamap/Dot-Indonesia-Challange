@@ -1,124 +1,107 @@
-import { Request } from "express";
 import fs from "fs";
 import { promisify } from "util"
-import { v4 as uuid4 } from "uuid";
 import AssignmentRepository from "../repositories/AssignmentRepository";
 import SubmissionRepository from "../repositories/SubmissionRepository";
+import BaseService from "./BaseService";
+import ResponseFormat from "../utils/ResponseFormat";
 
-class SubmissionService {
-    user: {
-        id: number,
-        role_id: number
-    }
-    body: Request["body"];
-    params: Request["params"];
-    query: Request["query"];
-    file: Express.Multer.File | undefined;
-
-    constructor(req: Request) {
-        this.user = req.app.locals.credentials;
-        this.body = req.body;
-        this.params = req.params;
-        this.query = req.query;
-        this.file = req.file
-    }
-
-    getsSubmissionByAssignmentId = async () => {
+class SubmissionService extends BaseService {
+    getsSubmissionByAssignmentId = async (): Promise<ResponseFormat> => {
         const assignment_id = parseInt(this.query.assignment_id as string, 10);
         const asg = await AssignmentRepository.findByIdAndUserId(assignment_id, this.user.id);
-        if (!asg) throw new Error("You aren't the owner of this assignment!")
+        if (!asg) return ResponseFormat.error(400, "You aren't the owner of this assignment!")
         const submissions = await SubmissionRepository.getsByAssignmentId(assignment_id);
-        if (submissions.length == 0) throw new Error("Submission Not Found!")
-        return {
-            message: "Success get all submissions",
-            submissions
-        };
+        if (submissions.length == 0) return ResponseFormat.error(404, "Submission Not Found!")
+        return ResponseFormat.resource(200, "Success get all submissions", submissions)
     }
 
-    store = async () => {
+    store = async (): Promise<ResponseFormat> => {
         const unlinkSync = promisify(fs.unlink)
-        const { assignment_id, message } = this.body
-        if (await AssignmentRepository.assignmentIdNotAvailable(assignment_id)) {
-            if (this.file) await unlinkSync('public/uploads/submissions/' + this.file.filename)
-            throw new Error("Assignment Not Found!")
-        }
-        let random;
-        do {
-            random = uuid4()
-        } while(await SubmissionRepository.randomNotUse(random))
-        let fileName = ""
-        if (this.file)
-            fileName = this.file.filename
-        else 
-            throw new Error("File tidak ditemukan");
-        const submission = await SubmissionRepository.insert(random, message, fileName, assignment_id, this.user.id);
-        if (submission.length == 0) await unlinkSync('public/uploads/submissions/' + fileName)
-        return {
-            message: "Submission created!",
-            submission: {
-                id: submission[0],
-                message,
-                file: fileName,
-                assignment_id,
-                user_id: this.user.id
-            }
+        try {
+            const storeData = this.convertDataToCreateSubmissionData(this.body)
+            const assignment = await AssignmentRepository.assignmentIdNotAvailable(storeData.assignment_id)
+            await this.checkAssignmentAvailable(assignment, unlinkSync)
+            const random = await this.loopingRandomField(SubmissionRepository)
+            const fileName = await this.checkFileAvailable(this.file)
+            const submission = await SubmissionRepository.insert({ ...storeData, random, file: fileName, user_id: this.user.id });
+            return ResponseFormat.resource(200, "Success create submission", { id: submission[0], ...storeData, file: fileName, random, user_id: this.user.id })
+        } catch (error: any) {
+            await unlinkSync('public/uploads/submissions/' + this.file?.filename)
+            return ResponseFormat.error(500, "Internal Server Error")
         }
     }
 
-    getOneByAssignmentIdAndUserId = async () => {
+    convertDataToCreateSubmissionData = (data: any): any => {
+        return {
+            message: data.message,
+            assignment_id: data.assignment_id
+        }
+    }
+
+    getOneByAssignmentIdAndUserId = async (): Promise<ResponseFormat> => {
         const asg = await AssignmentRepository.findByRandom(this.params.randomAssignment);
-        if (!asg) throw new Error("Assignment Not Found!")
+        if (!asg) return ResponseFormat.error(404, "Assignment Not Found!")
         const submission = await SubmissionRepository.getOneByAssignmentIdAndUserId(asg.id, this.user.id);
-        if (!submission) throw new Error("Submission Not Found!")
-        return {
-            message: "Success get submission",
-            submission
-        };
+        if (!submission) return ResponseFormat.error(404, "Submission Not Found!")
+        return ResponseFormat.resource(200, "Success get submission", submission)
     }
 
-    createValuation = async () => {
-        const { score, status } = this.body;
-        const submission = await SubmissionRepository.updateValuationByRandom(this.params.random, score, status);
-        if (submission != 1) throw new Error("Submission Not Found!")
+    createValuation = async (): Promise<ResponseFormat> => {
+        const storeData = this.convertDataToCreateValuationData(this.body)
+        const submission = await SubmissionRepository.updateValuationByRandom(this.params.random, storeData);
+        if (submission != 1) return ResponseFormat.error(404, "Submission Not Found!")
+        return ResponseFormat.resource(200, "Success create valuation", storeData)
+    }
+
+    convertDataToCreateValuationData = (data: any): any => {
         return {
-            message: "Valuation created!",
-            valuation: {
-                score,
-                status,
-            }
+            score: data.score,
+            status: data.status
         }
     }
 
-    update = async () => {
+    update = async (): Promise<ResponseFormat> => {
         const unlinkSync = promisify(fs.unlink)
-        const submit = await SubmissionRepository.findByRandom(this.params.random);
-        if (submit.status == "approved") {
-            if (this.file) await unlinkSync('public/uploads/submissions/' + this.file.filename)
+        try {
+            const submit = await SubmissionRepository.findByRandom(this.params.random);
+            this.checkSubmissionAvailable(submit, unlinkSync)
+            await unlinkSync('public/uploads/submissions/' + submit.file)
+            const fileName = await this.checkFileAvailable(this.file)
+            const updateData = this.convertDataToUpdateSubmissionData({message: this.body, file: fileName})
+            await SubmissionRepository.updateByRandom(this.params.random, updateData);
+            return ResponseFormat.success(201, "Success update submission")
+        } catch (error: any) {
+            await unlinkSync('public/uploads/submissions/' + this.file?.filename)
+            return ResponseFormat.error(500, "Internal Server Error")
+        }
+    }
+
+    convertDataToUpdateSubmissionData = (data: any): any => {
+        return {
+            message: data.message,
+            file: data.file
+        }
+    }
+
+    checkSubmissionAvailable = async (submissions: any, unlink: any) => {
+        if (submissions.status == "approved") {
+            if (this.file) await unlink('public/uploads/submissions/' + this.file.filename)
             throw new Error("Submission Not Update!")
         }
-        if (!submit) {
-            if (this.file) await unlinkSync('public/uploads/submissions/' + this.file.filename)
+        if (!submissions) {
+            if (this.file) await unlink('public/uploads/submissions/' + this.file.filename)
             throw new Error("Submission Not Found!")
-        } 
-        await unlinkSync('public/uploads/submissions/' + submit.file)
-        let fileName = ""
-        if (this.file)
-            fileName = this.file.filename
-        else 
-            throw new Error("File tidak ditemukan");
-        const submission = await SubmissionRepository.updateByRandom(this.params.random, this.body.message, fileName);
-        if (submission != 1) await unlinkSync('public/uploads/submissions/' + fileName)
-        return { message: "Submission updated!" }
+        }
     }
 
-    delete = async () => {
+    delete = async (): Promise<ResponseFormat> => {
         const unlinkSync = promisify(fs.unlink)
         const submission = await SubmissionRepository.findByRandom(this.params.random);
-        if (!submission) throw new Error("Submission Not Found!")
+        if (!submission) ResponseFormat.error(404, "Submission Not Found!")
         await unlinkSync('public/uploads/submissions/' + submission.file)
         const deleted = await SubmissionRepository.deleteByRandom(this.params.random);
-        if (deleted != 1) throw new Error("Submission Not Found!")
-        return { message: "Submission deleted!" }
+        if (deleted != 1) ResponseFormat.error(404, "Submission Not Found!")
+        return ResponseFormat.success(201, "Success delete submission")
     }
 }
 

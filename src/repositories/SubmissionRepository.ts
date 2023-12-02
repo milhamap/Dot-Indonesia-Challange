@@ -1,4 +1,7 @@
 import knex from "../configs/database";
+import CreateSubmissionDto from "../dtos/CreateSubmissionDto";
+import UpdateSubmissionDto from "../dtos/UpdateSubmissionDto";
+import UpdateValuationDto from "../dtos/UpdateValuationDto";
 
 class SubmissionRepository {
     // random not use
@@ -7,8 +10,8 @@ class SubmissionRepository {
     }
 
     // create
-    insert = async (random: string, message: string, file: string, assignment_id: number, user_id: number) => {
-        return await knex('submissions').insert({ random, message, file, assignment_id, user_id });
+    insert = async (createSubmissionDto: CreateSubmissionDto) => {
+        return await knex('submissions').insert(createSubmissionDto);
     }
 
     // read
@@ -25,12 +28,12 @@ class SubmissionRepository {
     }
 
     // update
-    updateByRandom = async (random: string, message: string, file: string) => {
-        return await knex('submissions').where({ random }).update({ message, file });
+    updateByRandom = async (random: string, updateSubmissionDto: UpdateSubmissionDto) => {
+        return await knex('submissions').where({ random }).update(updateSubmissionDto);
     }
 
-    updateValuationByRandom = async (random: string, score: number, status: string) => {
-        return await knex('submissions').where({ random }).update({ score, status });
+    updateValuationByRandom = async (random: string, updateValuationDto: UpdateValuationDto) => {
+        return await knex('submissions').where({ random }).update(updateValuationDto);
     }
 
     // delete

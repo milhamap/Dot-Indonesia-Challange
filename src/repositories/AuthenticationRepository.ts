@@ -1,4 +1,6 @@
 import knex from "../configs/database";
+import RegisterLectureDto from "../dtos/RegisterLectureDto";
+import RegisterStudentDto from "../dtos/RegisterStudentDto";
 
 class AuthenticationRepository {
     // random not use
@@ -16,26 +18,18 @@ class AuthenticationRepository {
     }
 
     // create
-    insertLecturer = async (nip: string, fullname: string, email: string, password: string, random: string) => {
+    insertLecturer = async (userLectureDto: RegisterLectureDto) => {
         return await knex('users').insert({
-            nip,
-            fullname,
-            email,
-            password,
+            ...userLectureDto,
             role_id: 2,
-            random,
             is_active: true
         });
     }
 
-    insertStudent = async (nrp: string, fullname: string, email: string, password: string, random: string) => {
+    insertStudent = async (userStudentDto: RegisterStudentDto) => {
         return await knex('users').insert({
-            nrp,
-            fullname,
-            email,
-            password,
-            role_id: 3,
-            random
+            ...userStudentDto,
+            role_id: 3
         });
     }
 
@@ -64,10 +58,6 @@ class AuthenticationRepository {
     updatePasswordById = async (id: number, password: string) => {
         return await knex('users').where({ id }).update({ password });
     }
-
-    // delete
-
-    
 }
 
 export default new AuthenticationRepository();
