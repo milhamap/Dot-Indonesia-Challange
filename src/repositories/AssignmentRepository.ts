@@ -10,7 +10,7 @@ class AssignmentRepository {
 
     // id not use
     assignmentIdNotAvailable = async (id: number) => {
-        return await knex('assignments').where({ id }).then((data: string | any) => data.length) === 0;
+        return await knex('assignments').where({ id }).then((data: string | any) => data.length) !== 0;
     }
 
     // create

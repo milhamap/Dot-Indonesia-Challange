@@ -95,4 +95,4 @@ $ npm run dev
 
 ## API Documentation
 
-You can access this project API documentation [here](https://documenter.getpostman.com/view/21604420/2s93eSZF5b)
+You can access this project API documentation [here](https://documenter.getpostman.com/view/21604420/2s8ZDYWLze)

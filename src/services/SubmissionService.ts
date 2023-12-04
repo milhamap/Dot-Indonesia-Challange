@@ -20,7 +20,7 @@ class SubmissionService extends BaseService {
         try {
             const storeData = this.convertDataToCreateSubmissionData(this.body)
             const assignment = await AssignmentRepository.assignmentIdNotAvailable(storeData.assignment_id)
-            await this.checkAssignmentAvailable(assignment, unlinkSync)
+            await this.checkAssignmentForSubmission(assignment, unlinkSync)
             const random = await this.loopingRandomField(SubmissionRepository)
             const fileName = await this.checkFileAvailable(this.file)
             const submission = await SubmissionRepository.insert({ ...storeData, random, file: fileName, user_id: this.user.id });
@@ -34,7 +34,7 @@ class SubmissionService extends BaseService {
     convertDataToCreateSubmissionData = (data: any): any => {
         return {
             message: data.message,
-            assignment_id: data.assignment_id
+            assignment_id: parseInt(data.assignment_id, 10)
         }
     }
 
@@ -92,6 +92,11 @@ class SubmissionService extends BaseService {
             if (this.file) await unlink('public/uploads/submissions/' + this.file.filename)
             throw new Error("Submission Not Found!")
         }
+    }
+
+    checkAssignmentForSubmission = async (assignment: any, unlink: any): Promise<ResponseFormat> => {
+        if (!assignment) if (this.file) await unlink('public/uploads/submissions/' + this.file.filename)
+        return ResponseFormat.error(404, "Assignment Not Found!");
     }
 
     delete = async (): Promise<ResponseFormat> => {

@@ -6,6 +6,7 @@ import randomstring from "randomstring";
 import BaseService from "./BaseService";
 import ResponseFormat from "../utils/ResponseFormat";
 import RegisterLectureDto from "../dtos/RegisterLectureDto";
+import RegisterStudentDto from "../dtos/RegisterStudentDto";
 
 class AuthenticationService extends BaseService {
     sendEmailVerification = async (): Promise<ResponseFormat> => {
@@ -91,7 +92,7 @@ class AuthenticationService extends BaseService {
         if (await AuthenticationRepository.emailOrNrpNotUse(registerData.email, registerData.nrp)) return ResponseFormat.error(400, "Email or NRP already used")
         const hashedPassword: string = await Authentication.passwordHash(registerData.password);
         registerData.password = hashedPassword;
-        await AuthenticationRepository.insertStudent(registerData)
+        await AuthenticationRepository.insertStudent(new RegisterStudentDto(registerData))
         return ResponseFormat.success(201, "Register success")
     }
 
