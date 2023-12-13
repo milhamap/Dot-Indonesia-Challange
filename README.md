@@ -52,11 +52,11 @@ Because I'm separating the business logic and persistence/request logic
 1. On your computer open the console/command prompt
 2. Enter the Following Command
 ```
-git clone https://github.com/milhamap/Dot-Indonesia-Challange.git
+git clone https://github.com/milhamap/E-Learning-Typescript.git
 ```
 3. Enter the Clone Results Folder
 ```
-cd Dot-Indonesia-Challange
+cd E-Learning-Typescript
 ```
 
 # How to Use Application
